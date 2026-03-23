@@ -1,0 +1,51 @@
+package com.boombustgroup.ledger
+
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import org.scalacheck.Gen
+
+class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
+
+  "distribute" should "always sum to total (residual plugging)" in {
+    val genTotal  = Gen.choose(1L, 10000000000L)
+    val genShares = Gen.listOfN(7, Gen.choose(1L, 10000L)).map(_.toArray)
+    forAll(genTotal, genShares) { (total, shares) =>
+      val result = Distribute.distribute(total, shares)
+      result.sum shouldBe total
+    }
+  }
+
+  it should "handle equal shares" in {
+    val result = Distribute.distribute(10000L, Array(1L, 1L, 1L))
+    result.sum shouldBe 10000L
+  }
+
+  it should "handle single recipient" in {
+    val result = Distribute.distribute(12345L, Array(10000L))
+    result(0) shouldBe 12345L
+  }
+
+  it should "handle large number of recipients" in {
+    val shares = Array.fill(100)(100L)
+    val result = Distribute.distribute(999999L, shares)
+    result.sum shouldBe 999999L
+  }
+
+  it should "handle extreme share imbalance" in {
+    val shares = Array(9999L, 1L)
+    val result = Distribute.distribute(1000000L, shares)
+    result.sum shouldBe 1000000L
+    result(0) should be > result(1)
+  }
+
+  it should "produce non-negative results for proportional shares" in {
+    val genTotal  = Gen.choose(1L, 10000000000L)
+    val genShares = Gen.listOfN(7, Gen.choose(1L, 10000L)).map(_.toArray)
+    forAll(genTotal, genShares) { (total, shares) =>
+      whenever(total >= 0) {
+        val result = Distribute.distribute(total, shares)
+        result.sum shouldBe total
+      }
+    }
+  }

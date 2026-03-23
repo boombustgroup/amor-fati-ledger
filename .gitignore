@@ -1,0 +1,9 @@
+target/
+.bloop/
+.bsp/
+.idea/
+.metals/
+.serena/
+*.class
+*.log
+*.jar
