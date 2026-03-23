@@ -49,5 +49,5 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 ## Part of the amor-fati ecosystem
 
-- [amor-fati](https://github.com/boombustgroup/amor-fati) — SFC-ABM engine (50 mechanisms, 1333 tests)
+- [amor-fati](https://github.com/boombustgroup/amor-fati) — macroeconomic SFC-ABM simulation engine
 - **amor-fati-ledger-poc** — this repo (verified flow interpreter)
