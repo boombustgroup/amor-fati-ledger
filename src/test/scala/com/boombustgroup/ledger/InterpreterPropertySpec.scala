@@ -33,8 +33,7 @@ class InterpreterPropertySpec extends AnyFlatSpec with Matchers with ScalaCheckP
     forAll(genBalances, genFlow) { (balances, flow) =>
       val result = Interpreter.applyFlow(balances, flow)
       balances.foreach { (k, v) =>
-        if k != flow.from && k != flow.to then
-          result.getOrElse(k, 0L) shouldBe v
+        if k != flow.from && k != flow.to then result.getOrElse(k, 0L) shouldBe v
       }
     }
   }

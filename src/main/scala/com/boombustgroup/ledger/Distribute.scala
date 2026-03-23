@@ -2,9 +2,8 @@ package com.boombustgroup.ledger
 
 /** Proportional distribution with residual plugging.
   *
-  * Distributes `total` across N recipients according to `shares`. The last
-  * recipient absorbs the rounding residual, guaranteeing:
-  *   distribute(total, shares).sum == total
+  * Distributes `total` across N recipients according to `shares`. The last recipient absorbs the rounding residual, guaranteeing:
+  * distribute(total, shares).sum == total
   *
   * This is exact by construction (Long addition). No tolerance needed.
   */
@@ -12,14 +11,17 @@ object Distribute:
 
   /** Distribute total across shares. Last element gets residual.
     *
-    * @param total  amount to distribute (scale 10^4)
-    * @param shares proportional weights (scale 10^4, i.e. 5000 = 50%)
-    * @return array of amounts summing to exactly `total`
+    * @param total
+    *   amount to distribute (scale 10^4)
+    * @param shares
+    *   proportional weights (scale 10^4, i.e. 5000 = 50%)
+    * @return
+    *   array of amounts summing to exactly `total`
     */
   def distribute(total: Long, shares: Array[Long]): Array[Long] =
     require(shares.nonEmpty, "Cannot distribute to zero recipients")
-    val n       = shares.length
-    val results = new Array[Long](n)
+    val n        = shares.length
+    val results  = new Array[Long](n)
     val shareSum = shares.sum
     require(shareSum > 0, "Share sum must be positive")
     var allocated = 0L

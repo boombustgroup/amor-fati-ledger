@@ -45,7 +45,7 @@ class InterpreterSpec extends AnyFlatSpec with Matchers:
     val flows = Vector(
       Flow(0, 1, 100000L, 0),
       Flow(1, 2, 50000L, 1),
-      Flow(2, 0, 25000L, 2),
+      Flow(2, 0, 25000L, 2)
     )
     val result = Interpreter.applyAll(balances, flows)
 
