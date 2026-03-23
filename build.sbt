@@ -2,7 +2,7 @@ lazy val root = (project in file("."))
   .settings(
     name         := "amor-fati-ledger-poc",
     organization := "com.boombustgroup",
-    version      := "0.1.0-SNAPSHOT",
+    version      := "0.1.0",
     scalaVersion := "3.8.2",
     scalacOptions ++= Seq(
       "-Werror",
