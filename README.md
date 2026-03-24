@@ -27,8 +27,14 @@ src/
   main/
     scala/                    # Production code (sbt compile + test)
       com/boombustgroup/ledger/
-        Flow.scala            # Flow case class with require(from != to)
-        Interpreter.scala     # Pure functional interpreter (Map-based)
+        Flow.scala            # Single flow: from, to, amount, mechanism
+        BatchedFlow.scala     # Sealed trait: Scatter (N:M) + Broadcast (1:N)
+        EntitySector.scala    # Population types: Households, Firms, Banks, ...
+        AssetType.scala       # Balance types: DemandDeposit, FirmLoan, ...
+        MechanismId.scala     # Opaque type for audit trail (generic, not model-specific)
+        Interpreter.scala     # Pure functional interpreter (Map-based, verified)
+        ImperativeInterpreter.scala  # Production interpreter (Array-based, fast)
+        MutableWorldState.scala      # Array[Long] per (sector, asset) — DOD
         Distribute.scala      # Proportional distribution with residual plug
     scala-stainless/          # Verified core (Stainless standalone, not sbt)
       Verified.scala          # Post-conditions verified by Z3
@@ -38,16 +44,26 @@ src/
         InterpreterSpec.scala         # Unit tests
         InterpreterPropertySpec.scala # ScalaCheck property-based tests
         DistributeSpec.scala          # Distribution exactness tests
+        EquivalenceSpec.scala         # Pure == Imperative bit-for-bit proof
 ```
 
-Two verification layers:
+Three verification layers:
 1. **Stainless + Z3** on `Verified.scala` — mathematical proof, runs in CI via `verify.yml`
 2. **ScalaCheck** on `Interpreter.scala` — 100+ random scenarios per property, runs in CI via `ci.yml`
+3. **Equivalence test** on `ImperativeInterpreter.scala` — proves Array-based shell == Map-based core bit-for-bit
+
+### Chain of trust
+
+```
+Stainless/Z3 proves → Verified.scala (pure Map)
+EquivalenceSpec proves → ImperativeInterpreter == Verified (bit-for-bit)
+Therefore → ImperativeInterpreter is correct
+```
 
 ## Run
 
 ```bash
-# Tests (18 tests, property-based)
+# Tests (24 tests, property-based + equivalence)
 sbt test
 
 # Formal verification (requires Stainless standalone + Z3)
