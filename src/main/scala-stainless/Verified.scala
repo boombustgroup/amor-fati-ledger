@@ -168,6 +168,39 @@ object Verified:
     allNonNegative(res)
   }
 
+  def floorPartNonNegative(total: BigInt, share: BigInt, shareSum: BigInt): Unit = {
+    require(total >= BigInt(0))
+    require(share >= BigInt(0))
+    require(shareSum > BigInt(0))
+  } ensuring { _ =>
+    (total * share) / shareSum >= BigInt(0)
+  }
+
+  def mapFloorShares(total: BigInt, shareSum: BigInt, shares: List[BigInt]): List[BigInt] = {
+    require(total >= BigInt(0))
+    require(shareSum > BigInt(0))
+    require(allNonNegative(shares))
+    shares match {
+      case Nil() =>
+        Nil[BigInt]()
+      case Cons(head, tail) =>
+        floorPartNonNegative(total, head, shareSum)
+        Cons((total * head) / shareSum, mapFloorShares(total, shareSum, tail))
+    }
+  } ensuring { res =>
+    allNonNegative(res)
+  }
+
+  def floorScaledSharesFold(total: BigInt, shareSum: BigInt, shares: List[BigInt]): List[BigInt] = {
+    require(total >= BigInt(0))
+    require(shareSum > BigInt(0))
+    require(allNonNegative(shares))
+    require(shareSum == listSum(shares))
+    mapFloorShares(total, shareSum, shares)
+  } ensuring { res =>
+    allNonNegative(res)
+  }
+
   // --- Property 5: Commutativity of disjoint flows ---
 
   def commutativity(
