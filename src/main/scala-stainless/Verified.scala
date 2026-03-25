@@ -12,8 +12,10 @@ import stainless.annotation._
 object Verified:
 
   case class VFlow(from: BigInt, to: BigInt, amount: BigInt)
+  case class RuntimeFlow(from: Int, to: Int, amount: Long)
 
   def validFlow(f: VFlow): Boolean = f.from != f.to
+  def validRuntimeFlow(f: RuntimeFlow): Boolean = f.from != f.to && f.amount >= 0L
 
   def allValid(flows: List[VFlow]): Boolean = flows match
     case Nil()       => true
@@ -35,6 +37,46 @@ object Verified:
       (k != flow.from && k != flow.to) ==>
         (res.getOrElse(k, BigInt(0)) == balances.getOrElse(k, BigInt(0)))
     )
+  }
+
+  def applyRuntimeFlow(balances: Map[Int, Long], flow: RuntimeFlow): Map[Int, Long] = {
+    require(validRuntimeFlow(flow))
+    val currentFrom = balances.getOrElse(flow.from, 0L)
+    val currentTo   = balances.getOrElse(flow.to, 0L)
+    require(currentFrom >= Long.MinValue + flow.amount)
+    require(currentTo <= Long.MaxValue - flow.amount)
+    balances
+      .updated(flow.from, currentFrom - flow.amount)
+      .updated(flow.to, currentTo + flow.amount)
+  } ensuring { res =>
+    (res.getOrElse(flow.from, 0L) == balances.getOrElse(flow.from, 0L) - flow.amount) &&
+    (res.getOrElse(flow.to, 0L) == balances.getOrElse(flow.to, 0L) + flow.amount) &&
+    forall((k: Int) =>
+      (k != flow.from && k != flow.to) ==>
+        (res.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
+    )
+  }
+
+  def commutativityRuntime(
+      balances: Map[Int, Long],
+      f1: RuntimeFlow,
+      f2: RuntimeFlow
+  ): Unit = {
+    require(validRuntimeFlow(f1) && validRuntimeFlow(f2))
+    require(f1.from != f2.from && f1.from != f2.to && f1.to != f2.from && f1.to != f2.to)
+
+    val b1From = balances.getOrElse(f1.from, 0L)
+    val b1To   = balances.getOrElse(f1.to, 0L)
+    val b2From = balances.getOrElse(f2.from, 0L)
+    val b2To   = balances.getOrElse(f2.to, 0L)
+
+    require(b1From >= Long.MinValue + f1.amount)
+    require(b1To <= Long.MaxValue - f1.amount)
+    require(b2From >= Long.MinValue + f2.amount)
+    require(b2To <= Long.MaxValue - f2.amount)
+  } ensuring { _ =>
+    applyRuntimeFlow(applyRuntimeFlow(balances, f1), f2) ==
+      applyRuntimeFlow(applyRuntimeFlow(balances, f2), f1)
   }
 
   // --- Property 3: Sequential application ---
@@ -60,6 +102,33 @@ object Verified:
     (part1, part2, total - part1 - part2)
   } ensuring { res =>
     res._1 + res._2 + res._3 == total
+  }
+
+  def listSum(xs: List[BigInt]): BigInt = xs match
+    case Nil()       => BigInt(0)
+    case Cons(x, tl) => x + listSum(tl)
+
+  def allNonNegative(xs: List[BigInt]): Boolean = xs match
+    case Nil()       => true
+    case Cons(x, tl) => x >= BigInt(0) && allNonNegative(tl)
+
+  def append(xs: List[BigInt], x: BigInt): List[BigInt] = {
+    xs match
+      case Nil()       => Cons(x, Nil())
+      case Cons(h, tl) => Cons(h, append(tl, x))
+  } ensuring { res =>
+    listSum(res) == listSum(xs) + x &&
+    ((allNonNegative(xs) && x >= BigInt(0)) ==> allNonNegative(res))
+  }
+
+  def distributeN(total: BigInt, parts: List[BigInt]): List[BigInt] = {
+    require(total >= BigInt(0))
+    require(allNonNegative(parts))
+    require(listSum(parts) <= total)
+    append(parts, total - listSum(parts))
+  } ensuring { res =>
+    listSum(res) == total &&
+    allNonNegative(res)
   }
 
   // --- Property 5: Commutativity of disjoint flows ---

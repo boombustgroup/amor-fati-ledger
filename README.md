@@ -10,17 +10,18 @@ The project has three layers with different levels of assurance:
 
 ### Layer 1: Formally verified reference model (Stainless + Z3)
 
-`src/main/scala-stainless/Verified.scala` — mathematical proofs verified by Z3 SMT solver. 16/16 verification conditions valid.
+`src/main/scala-stainless/Verified.scala` — mathematical proofs verified by Z3 SMT solver. 53/53 verification conditions valid.
 
 | Property | What it guarantees | Proved by |
 |---|---|---|
 | **Flow conservation** | `balances(from) + balances(to)` unchanged after any flow | Z3 (pointwise) |
 | **Frame condition** | All accounts not involved in the flow are untouched | Z3 (universal quantifier) |
 | **Sequential application** | `applyFlowList` preserves conservation across any flow sequence | Z3 (structural induction) |
-| **Distribution exactness** | `distribute(total, shares).sum == total` for 2 and 3 recipients | Z3 (residual plug) |
-| **Commutativity** | Flows on disjoint accounts produce the same result in any order | Z3 (map equality) |
+| **Distribution exactness** | Residual-plug distribution sums exactly to `total` for 2, 3, and general N-way list form | Z3 (residual plug) |
+| **Runtime apply semantics** | `Map[Int, Long]` runtime model preserves exact debit/credit + frame condition under anti-overflow preconditions | Z3 |
+| **Commutativity** | Flows on disjoint accounts produce the same result in any order in both `BigInt` and runtime `Int/Long` models | Z3 |
 
-This is the reference model — pure `Map[BigInt, BigInt]`, no arrays, no mutation. A true formal proof.
+This is the reference model — primarily pure `Map[BigInt, BigInt]`, plus a verified `Map[Int, Long]` runtime model with explicit anti-overflow preconditions. No arrays, no mutation. A true formal proof.
 
 ### Layer 2: Production code tested against reference (ScalaCheck + equivalence)
 
@@ -42,9 +43,10 @@ InterpreterPropertySpec tests → Interpreter checks analogous properties to Ver
 
 ### Layer 3: Not yet formally verified
 
-- N-way `distribute()` — proved for 2 and 3 recipients in Stainless, tested for arbitrary N via ScalaCheck
+- Residual-plug N-way distribution is formally verified in `Verified.scala`, but full proportional `Distribute.scala` with banker rounding is still only tested
 - Batch dimensions, sender/target index bounds, and non-negative amounts — enforced at runtime by `ImperativeInterpreter.validateBatch`, not formally verified
 - `MutableWorldState` — tested via equivalence, not formally verified (mutable state is hard to verify in SMT solvers)
+- Direct proof bridge between runtime `Int/Long` model and `BigInt` reference model — not yet formalized in Stainless
 
 ### Why pointwise, not global sum?
 
