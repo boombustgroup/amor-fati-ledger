@@ -9,6 +9,11 @@ import scala.collection.mutable
   *
   * This is the imperative shell. The verified core (Verified.scala) uses immutable Map. Equivalence tests prove they produce identical
   * results bit-for-bit.
+  *
+  * Important runtime boundary:
+  *   - this class does not validate per-index reads/writes on its own
+  *   - `getBalances` intentionally exposes the backing array for performance
+  *   - callers must uphold sector/index invariants; `ImperativeInterpreter.validateBatch` is the main guardrail for batched flows
   */
 class MutableWorldState(private val sectorSizes: Map[EntitySector, Int]):
 

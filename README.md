@@ -32,6 +32,7 @@ Production implementations are **not themselves formally verified**. They are te
 
 - **`Interpreter.scala`** (pure Map-based) — property-based tests (ScalaCheck, 100+ random scenarios per property), plus a test bridge against an embedded `BigInt` reference-model shape for non-overflow inputs
 - **`ImperativeInterpreter.scala`** (Array-based, fast) — tested for bit-for-bit equivalence with both `Interpreter.scala` and a pure runtime reference model via `EquivalenceSpec`, with runtime validation of batch dimensions, indices, and non-negative amounts
+- **`MutableWorldState.scala`** (mutable storage layer) — covered by direct contract tests for sparse snapshots, per-asset totals, key separation, and backing-array reuse; still a thin mutable API that relies on callers for index discipline
 - **`Distribute.scala`** (N-way distribution with floor-based residual plug) — property-based tests checking `sum == total`, non-negativity, and exact equivalence with a pure reference model
 
 The chain of trust:
@@ -50,7 +51,7 @@ InterpreterPropertySpec tests → Interpreter checks analogous properties to Ver
 
 - Residual-plug N-way distribution and proportional floor-with-residual list models are formally verified in `Verified.scala`; production `Distribute.scala` now uses the same floor-with-residual shape, but is still only tested, not formally linked to the model
 - Batch dimensions, sender/target index bounds, and non-negative amounts — enforced at runtime by `ImperativeInterpreter.validateBatch`, not formally verified
-- `MutableWorldState` — tested via equivalence, not formally verified (mutable state is hard to verify in SMT solvers)
+- `MutableWorldState` — not formally verified; direct contract tests cover storage semantics, but per-index safety is still a caller responsibility and the backing arrays remain intentionally mutable
 - Direct proof bridge between runtime `Int/Long` model and `BigInt` reference model — not yet fully formalized in Stainless; a bounded `BigInt` refinement step now exists, but direct cross-type embedding for `Int/Long -> BigInt` is still missing
 
 ### Why pointwise, not global sum?
