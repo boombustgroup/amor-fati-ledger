@@ -31,6 +31,10 @@ object Verified:
     case Nil()       => true
     case Cons(f, tl) => validRuntimeFlow(f) && allValidRuntime(tl)
 
+  def allValidRuntimeBounded(flows: List[RuntimeBoundedFlow]): Boolean = flows match
+    case Nil()       => true
+    case Cons(f, tl) => validRuntimeBoundedFlow(f) && allValidRuntimeBounded(tl)
+
   def canApplyRuntimeFlow(balances: Map[Int, Long], flow: RuntimeFlow): Boolean =
     validRuntimeFlow(flow) &&
       balances.getOrElse(flow.from, 0L) >= Long.MinValue + flow.amount &&
@@ -41,6 +45,27 @@ object Verified:
     case Cons(f, rest) =>
       canApplyRuntimeFlow(balances, f) &&
         canApplyRuntimeFlowList(applyRuntimeFlow(balances, f), rest)
+
+  def canApplyRuntimeBoundedFlow(balances: Map[BigInt, BigInt], flow: RuntimeBoundedFlow): Boolean =
+    validRuntimeBoundedFlow(flow) &&
+      balances.getOrElse(flow.from, BigInt(0)) >= runtimeMinBalance + flow.amount &&
+      balances.getOrElse(flow.to, BigInt(0)) <= runtimeMaxBalance - flow.amount
+
+  def canApplyRuntimeBoundedFlowList(
+      balances: Map[BigInt, BigInt],
+      flows: List[RuntimeBoundedFlow]
+  ): Boolean = flows match
+    case Nil() => true
+    case Cons(f, rest) =>
+      canApplyRuntimeBoundedFlow(balances, f) &&
+        canApplyRuntimeBoundedFlowList(applyRuntimeBoundedFlow(balances, f), rest)
+
+  def toVFlow(flow: RuntimeBoundedFlow): VFlow =
+    VFlow(flow.from, flow.to, flow.amount)
+
+  def toVFlowList(flows: List[RuntimeBoundedFlow]): List[VFlow] = flows match
+    case Nil()       => Nil()
+    case Cons(f, tl) => Cons(toVFlow(f), toVFlowList(tl))
 
   // --- Property 1+2: Flow conservation + Frame condition ---
 
@@ -147,6 +172,45 @@ object Verified:
     flows match
       case Nil()         => balances
       case Cons(f, rest) => applyRuntimeFlowList(applyRuntimeFlow(balances, f), rest)
+  }
+
+  def applyRuntimeBoundedFlowList(
+      balances: Map[BigInt, BigInt],
+      flows: List[RuntimeBoundedFlow]
+  ): Map[BigInt, BigInt] = {
+    require(canApplyRuntimeBoundedFlowList(balances, flows))
+    flows match
+      case Nil()         => balances
+      case Cons(f, rest) => applyRuntimeBoundedFlowList(applyRuntimeBoundedFlow(balances, f), rest)
+  }
+
+  def canApplyRuntimeBoundedFlowListProducesValidVFlows(
+      balances: Map[BigInt, BigInt],
+      flows: List[RuntimeBoundedFlow]
+  ): Unit = {
+    require(canApplyRuntimeBoundedFlowList(balances, flows))
+    flows match
+      case Nil() =>
+      case Cons(f, rest) =>
+        canApplyRuntimeBoundedFlowListProducesValidVFlows(applyRuntimeBoundedFlow(balances, f), rest)
+  } ensuring { _ =>
+    allValid(toVFlowList(flows))
+  }
+
+  def runtimeBoundedFlowListRefinesApplyFlowList(
+      balances: Map[BigInt, BigInt],
+      flows: List[RuntimeBoundedFlow]
+  ): Unit = {
+    require(canApplyRuntimeBoundedFlowList(balances, flows))
+    canApplyRuntimeBoundedFlowListProducesValidVFlows(balances, flows)
+    flows match
+      case Nil() =>
+      case Cons(f, rest) =>
+        runtimeBoundedRefinesApplyFlow(balances, f)
+        runtimeBoundedFlowListRefinesApplyFlowList(applyRuntimeBoundedFlow(balances, f), rest)
+  } ensuring { _ =>
+    applyRuntimeBoundedFlowList(balances, flows) ==
+      applyFlowList(balances, toVFlowList(flows))
   }
 
   // --- Property 4: Distribution exactness ---
