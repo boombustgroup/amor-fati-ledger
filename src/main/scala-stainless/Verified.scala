@@ -154,6 +154,20 @@ object Verified:
     allNonNegative(res)
   }
 
+  def distributeProportionalUnitResidual(total: BigInt, shares: List[BigInt]): List[BigInt] = {
+    require(total >= BigInt(0))
+    require(shares != Nil())
+    require(allNonNegative(shares))
+    require(listSum(shares) > BigInt(0))
+    val shareSum = listSum(shares)
+    val unit     = total / shareSum
+    val residual = total % shareSum
+    distributeN(total, scaleList(unit, shares))
+  } ensuring { res =>
+    listSum(res) == total &&
+    allNonNegative(res)
+  }
+
   // --- Property 5: Commutativity of disjoint flows ---
 
   def commutativity(
