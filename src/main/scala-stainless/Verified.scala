@@ -11,11 +11,17 @@ import stainless.annotation._
   */
 object Verified:
 
+  val runtimeMinBalance: BigInt = BigInt("-9223372036854775808")
+  val runtimeMaxBalance: BigInt = BigInt("9223372036854775807")
+
   case class VFlow(from: BigInt, to: BigInt, amount: BigInt)
   case class RuntimeFlow(from: Int, to: Int, amount: Long)
+  case class RuntimeBoundedFlow(from: BigInt, to: BigInt, amount: BigInt)
 
   def validFlow(f: VFlow): Boolean = f.from != f.to
   def validRuntimeFlow(f: RuntimeFlow): Boolean = f.from != f.to && f.amount >= 0L
+  def validRuntimeBoundedFlow(f: RuntimeBoundedFlow): Boolean =
+    f.from != f.to && f.amount >= BigInt(0) && f.amount <= runtimeMaxBalance
 
   def allValid(flows: List[VFlow]): Boolean = flows match
     case Nil()       => true
@@ -70,6 +76,39 @@ object Verified:
       (k != flow.from && k != flow.to) ==>
         (res.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
     )
+  }
+
+  def applyRuntimeBoundedFlow(
+      balances: Map[BigInt, BigInt],
+      flow: RuntimeBoundedFlow
+  ): Map[BigInt, BigInt] = {
+    require(validRuntimeBoundedFlow(flow))
+    val currentFrom = balances.getOrElse(flow.from, BigInt(0))
+    val currentTo   = balances.getOrElse(flow.to, BigInt(0))
+    require(currentFrom >= runtimeMinBalance + flow.amount)
+    require(currentTo <= runtimeMaxBalance - flow.amount)
+    balances
+      .updated(flow.from, currentFrom - flow.amount)
+      .updated(flow.to, currentTo + flow.amount)
+  } ensuring { res =>
+    (res.getOrElse(flow.from, BigInt(0)) == balances.getOrElse(flow.from, BigInt(0)) - flow.amount) &&
+    (res.getOrElse(flow.to, BigInt(0)) == balances.getOrElse(flow.to, BigInt(0)) + flow.amount) &&
+    forall((k: BigInt) =>
+      (k != flow.from && k != flow.to) ==>
+        (res.getOrElse(k, BigInt(0)) == balances.getOrElse(k, BigInt(0)))
+    )
+  }
+
+  def runtimeBoundedRefinesApplyFlow(
+      balances: Map[BigInt, BigInt],
+      flow: RuntimeBoundedFlow
+  ): Unit = {
+    require(validRuntimeBoundedFlow(flow))
+    require(balances.getOrElse(flow.from, BigInt(0)) >= runtimeMinBalance + flow.amount)
+    require(balances.getOrElse(flow.to, BigInt(0)) <= runtimeMaxBalance - flow.amount)
+  } ensuring { _ =>
+    applyRuntimeBoundedFlow(balances, flow) ==
+      applyFlow(balances, VFlow(flow.from, flow.to, flow.amount))
   }
 
   def commutativityRuntime(

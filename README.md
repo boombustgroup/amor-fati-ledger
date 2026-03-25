@@ -10,7 +10,7 @@ The project has three layers with different levels of assurance:
 
 ### Layer 1: Formally verified reference model (Stainless + Z3)
 
-`src/main/scala-stainless/Verified.scala` — mathematical proofs verified by Z3 SMT solver. 161/161 verification conditions valid.
+`src/main/scala-stainless/Verified.scala` — mathematical proofs verified by Z3 SMT solver. 167/167 verification conditions valid.
 
 | Property | What it guarantees | Proved by |
 |---|---|---|
@@ -21,9 +21,10 @@ The project has three layers with different levels of assurance:
 | **Proportional distribution model** | Exact-division, unit-with-residual, and floor-with-residual proportional list models are non-negative and sum exactly to `total` | Z3 |
 | **Runtime apply semantics** | `Map[Int, Long]` runtime model preserves exact debit/credit + frame condition under anti-overflow preconditions | Z3 |
 | **Runtime sequential semantics** | `applyRuntimeFlowList` is formally defined for flow sequences that satisfy an explicit `canApplyRuntimeFlowList` anti-overflow contract | Z3 |
+| **Runtime-bounded refinement step** | A `BigInt` model with `Long`-range bounds is formally shown to refine to the pure `applyFlow` reference semantics | Z3 |
 | **Commutativity** | Flows on disjoint accounts produce the same result in any order in both `BigInt` and runtime `Int/Long` models | Z3 |
 
-This is the reference model — primarily pure `Map[BigInt, BigInt]`, plus a verified `Map[Int, Long]` runtime model with explicit anti-overflow preconditions and a verified sequential runtime contract. No arrays, no mutation. A true formal proof.
+This is the reference model — primarily pure `Map[BigInt, BigInt]`, plus a verified `Map[Int, Long]` runtime model with explicit anti-overflow preconditions, a verified sequential runtime contract, and a bounded `BigInt` refinement layer that makes the runtime range assumptions explicit. No arrays, no mutation. A true formal proof.
 
 ### Layer 2: Production code tested against reference (ScalaCheck + equivalence)
 
@@ -50,7 +51,7 @@ InterpreterPropertySpec tests → Interpreter checks analogous properties to Ver
 - Residual-plug N-way distribution and proportional floor-with-residual list models are formally verified in `Verified.scala`; production `Distribute.scala` now uses the same floor-with-residual shape, but is still only tested, not formally linked to the model
 - Batch dimensions, sender/target index bounds, and non-negative amounts — enforced at runtime by `ImperativeInterpreter.validateBatch`, not formally verified
 - `MutableWorldState` — tested via equivalence, not formally verified (mutable state is hard to verify in SMT solvers)
-- Direct proof bridge between runtime `Int/Long` model and `BigInt` reference model — not yet formalized in Stainless; the runtime side is now stronger, but the cross-type refinement step is still missing
+- Direct proof bridge between runtime `Int/Long` model and `BigInt` reference model — not yet fully formalized in Stainless; a bounded `BigInt` refinement step now exists, but direct cross-type embedding for `Int/Long -> BigInt` is still missing
 
 ### Why pointwise, not global sum?
 
