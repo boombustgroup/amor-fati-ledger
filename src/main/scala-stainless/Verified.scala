@@ -62,6 +62,33 @@ object Verified:
     res._1 + res._2 + res._3 == total
   }
 
+  def listSum(xs: List[BigInt]): BigInt = xs match
+    case Nil()       => BigInt(0)
+    case Cons(x, tl) => x + listSum(tl)
+
+  def allNonNegative(xs: List[BigInt]): Boolean = xs match
+    case Nil()       => true
+    case Cons(x, tl) => x >= BigInt(0) && allNonNegative(tl)
+
+  def append(xs: List[BigInt], x: BigInt): List[BigInt] = {
+    xs match
+      case Nil()       => Cons(x, Nil())
+      case Cons(h, tl) => Cons(h, append(tl, x))
+  } ensuring { res =>
+    listSum(res) == listSum(xs) + x &&
+    ((allNonNegative(xs) && x >= BigInt(0)) ==> allNonNegative(res))
+  }
+
+  def distributeN(total: BigInt, parts: List[BigInt]): List[BigInt] = {
+    require(total >= BigInt(0))
+    require(allNonNegative(parts))
+    require(listSum(parts) <= total)
+    append(parts, total - listSum(parts))
+  } ensuring { res =>
+    listSum(res) == total &&
+    allNonNegative(res)
+  }
+
   // --- Property 5: Commutativity of disjoint flows ---
 
   def commutativity(
