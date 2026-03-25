@@ -11,15 +11,61 @@ import stainless.annotation._
   */
 object Verified:
 
+  val runtimeMinBalance: BigInt = BigInt("-9223372036854775808")
+  val runtimeMaxBalance: BigInt = BigInt("9223372036854775807")
+
   case class VFlow(from: BigInt, to: BigInt, amount: BigInt)
   case class RuntimeFlow(from: Int, to: Int, amount: Long)
+  case class RuntimeBoundedFlow(from: BigInt, to: BigInt, amount: BigInt)
 
   def validFlow(f: VFlow): Boolean = f.from != f.to
   def validRuntimeFlow(f: RuntimeFlow): Boolean = f.from != f.to && f.amount >= 0L
+  def validRuntimeBoundedFlow(f: RuntimeBoundedFlow): Boolean =
+    f.from != f.to && f.amount >= BigInt(0) && f.amount <= runtimeMaxBalance
 
   def allValid(flows: List[VFlow]): Boolean = flows match
     case Nil()       => true
     case Cons(f, tl) => validFlow(f) && allValid(tl)
+
+  def allValidRuntime(flows: List[RuntimeFlow]): Boolean = flows match
+    case Nil()       => true
+    case Cons(f, tl) => validRuntimeFlow(f) && allValidRuntime(tl)
+
+  def allValidRuntimeBounded(flows: List[RuntimeBoundedFlow]): Boolean = flows match
+    case Nil()       => true
+    case Cons(f, tl) => validRuntimeBoundedFlow(f) && allValidRuntimeBounded(tl)
+
+  def canApplyRuntimeFlow(balances: Map[Int, Long], flow: RuntimeFlow): Boolean =
+    validRuntimeFlow(flow) &&
+      balances.getOrElse(flow.from, 0L) >= Long.MinValue + flow.amount &&
+      balances.getOrElse(flow.to, 0L) <= Long.MaxValue - flow.amount
+
+  def canApplyRuntimeFlowList(balances: Map[Int, Long], flows: List[RuntimeFlow]): Boolean = flows match
+    case Nil() => true
+    case Cons(f, rest) =>
+      canApplyRuntimeFlow(balances, f) &&
+        canApplyRuntimeFlowList(applyRuntimeFlow(balances, f), rest)
+
+  def canApplyRuntimeBoundedFlow(balances: Map[BigInt, BigInt], flow: RuntimeBoundedFlow): Boolean =
+    validRuntimeBoundedFlow(flow) &&
+      balances.getOrElse(flow.from, BigInt(0)) >= runtimeMinBalance + flow.amount &&
+      balances.getOrElse(flow.to, BigInt(0)) <= runtimeMaxBalance - flow.amount
+
+  def canApplyRuntimeBoundedFlowList(
+      balances: Map[BigInt, BigInt],
+      flows: List[RuntimeBoundedFlow]
+  ): Boolean = flows match
+    case Nil() => true
+    case Cons(f, rest) =>
+      canApplyRuntimeBoundedFlow(balances, f) &&
+        canApplyRuntimeBoundedFlowList(applyRuntimeBoundedFlow(balances, f), rest)
+
+  def toVFlow(flow: RuntimeBoundedFlow): VFlow =
+    VFlow(flow.from, flow.to, flow.amount)
+
+  def toVFlowList(flows: List[RuntimeBoundedFlow]): List[VFlow] = flows match
+    case Nil()       => Nil()
+    case Cons(f, tl) => Cons(toVFlow(f), toVFlowList(tl))
 
   // --- Property 1+2: Flow conservation + Frame condition ---
 
@@ -57,6 +103,39 @@ object Verified:
     )
   }
 
+  def applyRuntimeBoundedFlow(
+      balances: Map[BigInt, BigInt],
+      flow: RuntimeBoundedFlow
+  ): Map[BigInt, BigInt] = {
+    require(validRuntimeBoundedFlow(flow))
+    val currentFrom = balances.getOrElse(flow.from, BigInt(0))
+    val currentTo   = balances.getOrElse(flow.to, BigInt(0))
+    require(currentFrom >= runtimeMinBalance + flow.amount)
+    require(currentTo <= runtimeMaxBalance - flow.amount)
+    balances
+      .updated(flow.from, currentFrom - flow.amount)
+      .updated(flow.to, currentTo + flow.amount)
+  } ensuring { res =>
+    (res.getOrElse(flow.from, BigInt(0)) == balances.getOrElse(flow.from, BigInt(0)) - flow.amount) &&
+    (res.getOrElse(flow.to, BigInt(0)) == balances.getOrElse(flow.to, BigInt(0)) + flow.amount) &&
+    forall((k: BigInt) =>
+      (k != flow.from && k != flow.to) ==>
+        (res.getOrElse(k, BigInt(0)) == balances.getOrElse(k, BigInt(0)))
+    )
+  }
+
+  def runtimeBoundedRefinesApplyFlow(
+      balances: Map[BigInt, BigInt],
+      flow: RuntimeBoundedFlow
+  ): Unit = {
+    require(validRuntimeBoundedFlow(flow))
+    require(balances.getOrElse(flow.from, BigInt(0)) >= runtimeMinBalance + flow.amount)
+    require(balances.getOrElse(flow.to, BigInt(0)) <= runtimeMaxBalance - flow.amount)
+  } ensuring { _ =>
+    applyRuntimeBoundedFlow(balances, flow) ==
+      applyFlow(balances, VFlow(flow.from, flow.to, flow.amount))
+  }
+
   def commutativityRuntime(
       balances: Map[Int, Long],
       f1: RuntimeFlow,
@@ -74,6 +153,38 @@ object Verified:
     require(b1To <= Long.MaxValue - f1.amount)
     require(b2From >= Long.MinValue + f2.amount)
     require(b2To <= Long.MaxValue - f2.amount)
+
+    val afterF1 = applyRuntimeFlow(balances, f1)
+    val afterF2 = applyRuntimeFlow(balances, f2)
+
+    assert(afterF1.getOrElse(f2.from, 0L) == b2From)
+    assert(afterF1.getOrElse(f2.to, 0L) == b2To)
+    assert(afterF2.getOrElse(f1.from, 0L) == b1From)
+    assert(afterF2.getOrElse(f1.to, 0L) == b1To)
+
+    val order12 = applyRuntimeFlow(afterF1, f2)
+    val order21 = applyRuntimeFlow(afterF2, f1)
+
+    assert(order12.getOrElse(f1.from, 0L) == b1From - f1.amount)
+    assert(order21.getOrElse(f1.from, 0L) == b1From - f1.amount)
+    assert(order12.getOrElse(f1.to, 0L) == b1To + f1.amount)
+    assert(order21.getOrElse(f1.to, 0L) == b1To + f1.amount)
+    assert(order12.getOrElse(f2.from, 0L) == b2From - f2.amount)
+    assert(order21.getOrElse(f2.from, 0L) == b2From - f2.amount)
+    assert(order12.getOrElse(f2.to, 0L) == b2To + f2.amount)
+    assert(order21.getOrElse(f2.to, 0L) == b2To + f2.amount)
+    assert(
+      forall((k: Int) =>
+        (k != f1.from && k != f1.to && k != f2.from && k != f2.to) ==>
+          (order12.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
+      )
+    )
+    assert(
+      forall((k: Int) =>
+        (k != f1.from && k != f1.to && k != f2.from && k != f2.to) ==>
+          (order21.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
+      )
+    )
   } ensuring { _ =>
     applyRuntimeFlow(applyRuntimeFlow(balances, f1), f2) ==
       applyRuntimeFlow(applyRuntimeFlow(balances, f2), f1)
@@ -86,6 +197,52 @@ object Verified:
     flows match
       case Nil()         => balances
       case Cons(f, rest) => applyFlowList(applyFlow(balances, f), rest)
+  }
+
+  def applyRuntimeFlowList(balances: Map[Int, Long], flows: List[RuntimeFlow]): Map[Int, Long] = {
+    require(canApplyRuntimeFlowList(balances, flows))
+    flows match
+      case Nil()         => balances
+      case Cons(f, rest) => applyRuntimeFlowList(applyRuntimeFlow(balances, f), rest)
+  }
+
+  def applyRuntimeBoundedFlowList(
+      balances: Map[BigInt, BigInt],
+      flows: List[RuntimeBoundedFlow]
+  ): Map[BigInt, BigInt] = {
+    require(canApplyRuntimeBoundedFlowList(balances, flows))
+    flows match
+      case Nil()         => balances
+      case Cons(f, rest) => applyRuntimeBoundedFlowList(applyRuntimeBoundedFlow(balances, f), rest)
+  }
+
+  def canApplyRuntimeBoundedFlowListProducesValidVFlows(
+      balances: Map[BigInt, BigInt],
+      flows: List[RuntimeBoundedFlow]
+  ): Unit = {
+    require(canApplyRuntimeBoundedFlowList(balances, flows))
+    flows match
+      case Nil() =>
+      case Cons(f, rest) =>
+        canApplyRuntimeBoundedFlowListProducesValidVFlows(applyRuntimeBoundedFlow(balances, f), rest)
+  } ensuring { _ =>
+    allValid(toVFlowList(flows))
+  }
+
+  def runtimeBoundedFlowListRefinesApplyFlowList(
+      balances: Map[BigInt, BigInt],
+      flows: List[RuntimeBoundedFlow]
+  ): Unit = {
+    require(canApplyRuntimeBoundedFlowList(balances, flows))
+    canApplyRuntimeBoundedFlowListProducesValidVFlows(balances, flows)
+    flows match
+      case Nil() =>
+      case Cons(f, rest) =>
+        runtimeBoundedRefinesApplyFlow(balances, f)
+        runtimeBoundedFlowListRefinesApplyFlowList(applyRuntimeBoundedFlow(balances, f), rest)
+  } ensuring { _ =>
+    applyRuntimeBoundedFlowList(balances, flows) ==
+      applyFlowList(balances, toVFlowList(flows))
   }
 
   // --- Property 4: Distribution exactness ---
