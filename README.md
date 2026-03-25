@@ -27,15 +27,15 @@ This is the reference model — pure `Map[BigInt, BigInt]`, no arrays, no mutati
 Production implementations are **not themselves formally verified**. They are tested for correctness:
 
 - **`Interpreter.scala`** (pure Map-based) — property-based tests (ScalaCheck, 100+ random scenarios per property)
-- **`ImperativeInterpreter.scala`** (Array-based, fast) — tested for bit-for-bit equivalence with `Interpreter.scala` via `EquivalenceSpec`
-- **`Distribute.scala`** (N-way distribution with residual plug) — property-based tests proving `sum == total` for arbitrary N
+- **`ImperativeInterpreter.scala`** (Array-based, fast) — tested for bit-for-bit equivalence with `Interpreter.scala` via `EquivalenceSpec`, with runtime validation of batch dimensions, indices, and non-negative amounts
+- **`Distribute.scala`** (N-way distribution with residual plug) — property-based tests checking `sum == total` for arbitrary N
 
 The chain of trust:
 
 ```
 Stainless/Z3 proves → Verified.scala (reference model)
 EquivalenceSpec tests → ImperativeInterpreter == Interpreter (bit-for-bit)
-InterpreterPropertySpec tests → Interpreter satisfies same properties as Verified.scala
+InterpreterPropertySpec tests → Interpreter checks analogous properties to Verified.scala
 ```
 
 **Important distinction:** `EquivalenceSpec` is a test, not a formal proof. It provides strong empirical evidence but not mathematical certainty that the production interpreter matches the verified model.
@@ -43,7 +43,7 @@ InterpreterPropertySpec tests → Interpreter satisfies same properties as Verif
 ### Layer 3: Not yet formally verified
 
 - N-way `distribute()` — proved for 2 and 3 recipients in Stainless, tested for arbitrary N via ScalaCheck
-- `BatchedFlow` index bounds — enforced by `require()` at runtime, not formally verified
+- Batch dimensions, sender/target index bounds, and non-negative amounts — enforced at runtime by `ImperativeInterpreter.validateBatch`, not formally verified
 - `MutableWorldState` — tested via equivalence, not formally verified (mutable state is hard to verify in SMT solvers)
 
 ### Why pointwise, not global sum?
@@ -93,12 +93,12 @@ sbt test
 - **Stainless** (EPFL) — formal verification for Scala, powered by Z3
 - **Z3** (Microsoft Research) — SMT solver
 - **ScalaCheck** — property-based testing
-- **Long-based arithmetic** — all amounts are `Long` (scale 10^4), addition is exact
+- **Long-based arithmetic** — all amounts are `Long` (scale 10^4), avoiding floating-point error within bounded integer arithmetic
 
 ## Part of the amor-fati ecosystem
 
 - [amor-fati](https://github.com/boombustgroup/amor-fati) — macroeconomic SFC-ABM simulation engine
-- **amor-fati-ledger-poc** — this repo (verified flow interpreter)
+- **amor-fati-ledger-poc** — this repo (ledger POC with a formally verified reference core)
 
 ## License
 

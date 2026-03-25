@@ -75,6 +75,36 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
     }
   }
 
+  it should "reject scatter batches with invalid sender dimension" in {
+    val batch = BatchedFlow.Scatter(
+      HH,
+      Banks,
+      Array.fill(NumHH - 1)(100L),
+      Array.fill(NumHH - 1)(0),
+      Asset,
+      MechanismId(1)
+    )
+
+    val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
+    an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
+  }
+
+  it should "reject scatter batches with out-of-bounds target indices" in {
+    val targets = Array.fill(NumHH)(0)
+    targets(NumHH - 1) = NumBanks
+    val batch = BatchedFlow.Scatter(
+      HH,
+      Banks,
+      Array.fill(NumHH)(100L),
+      targets,
+      Asset,
+      MechanismId(1)
+    )
+
+    val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
+    an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
+  }
+
   // --- Broadcast (1:N) tests ---
 
   private val NumFunds = 7
@@ -133,4 +163,36 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
     state.balance(HH, Asset, 0) shouldBe 10000L
     state.balance(HH, Asset, 1) shouldBe 20000L
     state.balance(HH, Asset, 2) shouldBe 30000L
+  }
+
+  it should "reject broadcast batches with invalid sender index" in {
+    val batch = BatchedFlow.Broadcast(
+      Funds,
+      NumFunds,
+      HH,
+      Array.fill(NumHH)(100L),
+      (0 until NumHH).toArray,
+      Asset,
+      MechanismId(2)
+    )
+
+    val state = new MutableWorldState(Map(HH -> NumHH, Funds -> NumFunds))
+    an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
+  }
+
+  it should "reject broadcast batches with out-of-bounds target indices" in {
+    val targets = (0 until NumHH).toArray
+    targets(0) = NumHH
+    val batch = BatchedFlow.Broadcast(
+      Funds,
+      ZusIndex,
+      HH,
+      Array.fill(NumHH)(100L),
+      targets,
+      Asset,
+      MechanismId(2)
+    )
+
+    val state = new MutableWorldState(Map(HH -> NumHH, Funds -> NumFunds))
+    an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
   }
