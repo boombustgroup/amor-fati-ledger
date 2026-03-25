@@ -1,20 +1,50 @@
 # amor-fati-ledger-poc
 
-Formally verified double-entry flow interpreter for Stock-Flow Consistent (SFC) agent-based models.
-
-Every monetary flow is a debit/credit pair. The interpreter makes it **mathematically impossible** to produce unbalanced books — proved by [Stainless](https://epfl-lara.github.io/stainless/) + Z3 SMT solver. 16/16 verification conditions valid.
+Double-entry flow interpreter for Stock-Flow Consistent (SFC) agent-based models, with a formally verified reference core.
 
 Built for [amor-fati](https://github.com/boombustgroup/amor-fati), a macroeconomic SFC-ABM simulation engine.
 
-### Properties proved (16/16 valid)
+## Verification scope
+
+The project has three layers with different levels of assurance:
+
+### Layer 1: Formally verified reference model (Stainless + Z3)
+
+`src/main/scala-stainless/Verified.scala` — mathematical proofs verified by Z3 SMT solver. 16/16 verification conditions valid.
 
 | Property | What it guarantees | Proved by |
 |---|---|---|
 | **Flow conservation** | `balances(from) + balances(to)` unchanged after any flow | Z3 (pointwise) |
 | **Frame condition** | All accounts not involved in the flow are untouched | Z3 (universal quantifier) |
 | **Sequential application** | `applyFlowList` preserves conservation across any flow sequence | Z3 (structural induction) |
-| **Distribution exactness** | `distribute(total, shares).sum == total` — no rounding loss | Z3 (residual plug) |
+| **Distribution exactness** | `distribute(total, shares).sum == total` for 2 and 3 recipients | Z3 (residual plug) |
 | **Commutativity** | Flows on disjoint accounts produce the same result in any order | Z3 (map equality) |
+
+This is the reference model — pure `Map[BigInt, BigInt]`, no arrays, no mutation. A true formal proof.
+
+### Layer 2: Production code tested against reference (ScalaCheck + equivalence)
+
+Production implementations are **not themselves formally verified**. They are tested for correctness:
+
+- **`Interpreter.scala`** (pure Map-based) — property-based tests (ScalaCheck, 100+ random scenarios per property)
+- **`ImperativeInterpreter.scala`** (Array-based, fast) — tested for bit-for-bit equivalence with `Interpreter.scala` via `EquivalenceSpec`
+- **`Distribute.scala`** (N-way distribution with residual plug) — property-based tests proving `sum == total` for arbitrary N
+
+The chain of trust:
+
+```
+Stainless/Z3 proves → Verified.scala (reference model)
+EquivalenceSpec tests → ImperativeInterpreter == Interpreter (bit-for-bit)
+InterpreterPropertySpec tests → Interpreter satisfies same properties as Verified.scala
+```
+
+**Important distinction:** `EquivalenceSpec` is a test, not a formal proof. It provides strong empirical evidence but not mathematical certainty that the production interpreter matches the verified model.
+
+### Layer 3: Not yet formally verified
+
+- N-way `distribute()` — proved for 2 and 3 recipients in Stainless, tested for arbitrary N via ScalaCheck
+- `BatchedFlow` index bounds — enforced by `require()` at runtime, not formally verified
+- `MutableWorldState` — tested via equivalence, not formally verified (mutable state is hard to verify in SMT solvers)
 
 ### Why pointwise, not global sum?
 
@@ -32,11 +62,11 @@ src/
         EntitySector.scala    # Population types: Households, Firms, Banks, ...
         AssetType.scala       # Balance types: DemandDeposit, FirmLoan, ...
         MechanismId.scala     # Opaque type for audit trail (generic, not model-specific)
-        Interpreter.scala     # Pure functional interpreter (Map-based, verified)
+        Interpreter.scala     # Pure functional interpreter (Map-based)
         ImperativeInterpreter.scala  # Production interpreter (Array-based, fast)
         MutableWorldState.scala      # Array[Long] per (sector, asset) — DOD
         Distribute.scala      # Proportional distribution with residual plug
-    scala-stainless/          # Verified core (Stainless standalone, not sbt)
+    scala-stainless/          # Formally verified reference model (Stainless standalone)
       Verified.scala          # Post-conditions verified by Z3
   test/
     scala/
@@ -44,20 +74,7 @@ src/
         InterpreterSpec.scala         # Unit tests
         InterpreterPropertySpec.scala # ScalaCheck property-based tests
         DistributeSpec.scala          # Distribution exactness tests
-        EquivalenceSpec.scala         # Pure == Imperative bit-for-bit proof
-```
-
-Three verification layers:
-1. **Stainless + Z3** on `Verified.scala` — mathematical proof, runs in CI via `verify.yml`
-2. **ScalaCheck** on `Interpreter.scala` — 100+ random scenarios per property, runs in CI via `ci.yml`
-3. **Equivalence test** on `ImperativeInterpreter.scala` — proves Array-based shell == Map-based core bit-for-bit
-
-### Chain of trust
-
-```
-Stainless/Z3 proves → Verified.scala (pure Map)
-EquivalenceSpec proves → ImperativeInterpreter == Verified (bit-for-bit)
-Therefore → ImperativeInterpreter is correct
+        EquivalenceSpec.scala         # Pure == Imperative bit-for-bit equivalence
 ```
 
 ## Run
@@ -72,7 +89,7 @@ sbt test
 
 ## Stack
 
-- **Scala 3.7** (pinned to Stainless 0.9.9.2 bundled compiler)
+- **Scala 3.8** (Stainless standalone bundles its own 3.7.2 compiler)
 - **Stainless** (EPFL) — formal verification for Scala, powered by Z3
 - **Z3** (Microsoft Research) — SMT solver
 - **ScalaCheck** — property-based testing
