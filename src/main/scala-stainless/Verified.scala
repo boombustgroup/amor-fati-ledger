@@ -103,6 +103,53 @@ object Verified:
     )
   }
 
+  def applyInterpreterFlow(balances: Map[Int, Long], flow: RuntimeFlow): Map[Int, Long] = {
+    require(canApplyRuntimeFlow(balances, flow))
+    val currentFrom = balances.getOrElse(flow.from, 0L)
+    val currentTo   = balances.getOrElse(flow.to, 0L)
+    balances
+      .updated(flow.from, currentFrom - flow.amount)
+      .updated(flow.to, currentTo + flow.amount)
+  } ensuring { res =>
+    (res.getOrElse(flow.from, 0L) == balances.getOrElse(flow.from, 0L) - flow.amount) &&
+    (res.getOrElse(flow.to, 0L) == balances.getOrElse(flow.to, 0L) + flow.amount) &&
+    forall((k: Int) =>
+      (k != flow.from && k != flow.to) ==>
+        (res.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
+    )
+  }
+
+  def interpreterFlowRefinesRuntimeFlow(
+      balances: Map[Int, Long],
+      flow: RuntimeFlow
+  ): Unit = {
+    require(canApplyRuntimeFlow(balances, flow))
+  } ensuring { _ =>
+    applyInterpreterFlow(balances, flow) == applyRuntimeFlow(balances, flow)
+  }
+
+  def commutativityInterpreter(
+      balances: Map[Int, Long],
+      f1: RuntimeFlow,
+      f2: RuntimeFlow
+  ): Unit = {
+    require(validRuntimeFlow(f1) && validRuntimeFlow(f2))
+    require(f1.from != f2.from && f1.from != f2.to && f1.to != f2.from && f1.to != f2.to)
+
+    val b1From = balances.getOrElse(f1.from, 0L)
+    val b1To   = balances.getOrElse(f1.to, 0L)
+    val b2From = balances.getOrElse(f2.from, 0L)
+    val b2To   = balances.getOrElse(f2.to, 0L)
+
+    require(b1From >= Long.MinValue + f1.amount)
+    require(b1To <= Long.MaxValue - f1.amount)
+    require(b2From >= Long.MinValue + f2.amount)
+    require(b2To <= Long.MaxValue - f2.amount)
+  } ensuring { _ =>
+    applyInterpreterFlow(applyInterpreterFlow(balances, f1), f2) ==
+      applyInterpreterFlow(applyInterpreterFlow(balances, f2), f1)
+  }
+
   def applyRuntimeBoundedFlow(
       balances: Map[BigInt, BigInt],
       flow: RuntimeBoundedFlow
@@ -204,6 +251,27 @@ object Verified:
     flows match
       case Nil()         => balances
       case Cons(f, rest) => applyRuntimeFlowList(applyRuntimeFlow(balances, f), rest)
+  }
+
+  def applyInterpreterFlowList(balances: Map[Int, Long], flows: List[RuntimeFlow]): Map[Int, Long] = {
+    require(canApplyRuntimeFlowList(balances, flows))
+    flows match
+      case Nil()         => balances
+      case Cons(f, rest) => applyInterpreterFlowList(applyInterpreterFlow(balances, f), rest)
+  }
+
+  def interpreterFlowListRefinesRuntimeFlowList(
+      balances: Map[Int, Long],
+      flows: List[RuntimeFlow]
+  ): Unit = {
+    require(canApplyRuntimeFlowList(balances, flows))
+    flows match
+      case Nil() =>
+      case Cons(f, rest) =>
+        interpreterFlowRefinesRuntimeFlow(balances, f)
+        interpreterFlowListRefinesRuntimeFlowList(applyInterpreterFlow(balances, f), rest)
+  } ensuring { _ =>
+    applyInterpreterFlowList(balances, flows) == applyRuntimeFlowList(balances, flows)
   }
 
   def applyRuntimeBoundedFlowList(
