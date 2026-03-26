@@ -13,8 +13,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 class DistributeVerifiedBridgeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
 
   private def bigIntFloorPrefix(total: Long, shares: List[Long]): List[BigInt] =
-    val shareSum = shares.foldLeft(0L)(_ + _)
-    val denom    = BigInt(shareSum)
+    val denom = shares.foldLeft(BigInt(0))((acc, share) => acc + BigInt(share))
     shares.init.map(share => (BigInt(total) * BigInt(share)) / denom)
 
   private def verifiedShape(total: Long, shares: List[Long]): List[BigInt] =
