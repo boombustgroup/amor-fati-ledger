@@ -103,6 +103,31 @@ object Verified:
     )
   }
 
+  def applyInterpreterFlow(balances: Map[Int, Long], flow: RuntimeFlow): Map[Int, Long] = {
+    require(canApplyRuntimeFlow(balances, flow))
+    val currentFrom = balances.getOrElse(flow.from, 0L)
+    val currentTo   = balances.getOrElse(flow.to, 0L)
+    balances
+      .updated(flow.from, currentFrom - flow.amount)
+      .updated(flow.to, currentTo + flow.amount)
+  } ensuring { res =>
+    (res.getOrElse(flow.from, 0L) == balances.getOrElse(flow.from, 0L) - flow.amount) &&
+    (res.getOrElse(flow.to, 0L) == balances.getOrElse(flow.to, 0L) + flow.amount) &&
+    forall((k: Int) =>
+      (k != flow.from && k != flow.to) ==>
+        (res.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
+    )
+  }
+
+  def interpreterFlowRefinesRuntimeFlow(
+      balances: Map[Int, Long],
+      flow: RuntimeFlow
+  ): Unit = {
+    require(canApplyRuntimeFlow(balances, flow))
+  } ensuring { _ =>
+    applyInterpreterFlow(balances, flow) == applyRuntimeFlow(balances, flow)
+  }
+
   def applyRuntimeBoundedFlow(
       balances: Map[BigInt, BigInt],
       flow: RuntimeBoundedFlow
@@ -204,6 +229,27 @@ object Verified:
     flows match
       case Nil()         => balances
       case Cons(f, rest) => applyRuntimeFlowList(applyRuntimeFlow(balances, f), rest)
+  }
+
+  def applyInterpreterFlowList(balances: Map[Int, Long], flows: List[RuntimeFlow]): Map[Int, Long] = {
+    require(canApplyRuntimeFlowList(balances, flows))
+    flows match
+      case Nil()         => balances
+      case Cons(f, rest) => applyInterpreterFlowList(applyInterpreterFlow(balances, f), rest)
+  }
+
+  def interpreterFlowListRefinesRuntimeFlowList(
+      balances: Map[Int, Long],
+      flows: List[RuntimeFlow]
+  ): Unit = {
+    require(canApplyRuntimeFlowList(balances, flows))
+    flows match
+      case Nil() =>
+      case Cons(f, rest) =>
+        interpreterFlowRefinesRuntimeFlow(balances, f)
+        interpreterFlowListRefinesRuntimeFlowList(applyInterpreterFlow(balances, f), rest)
+  } ensuring { _ =>
+    applyInterpreterFlowList(balances, flows) == applyRuntimeFlowList(balances, flows)
   }
 
   def applyRuntimeBoundedFlowList(
