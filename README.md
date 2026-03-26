@@ -109,7 +109,12 @@ sbt test
 ./verify.sh
 ```
 
-## Stack
+## Tech Stack
+
+![Scala](https://img.shields.io/badge/Scala_3-DC322F?logo=scala&logoColor=white)
+![Stainless](https://img.shields.io/badge/Stainless-Formal%20Verification-4B5563)
+![Z3](https://img.shields.io/badge/Z3-SMT%20Solver-1F6FEB)
+![sbt](https://img.shields.io/badge/sbt-1.10-blue)
 
 - **Scala 3.8** (Stainless standalone bundles its own 3.7.2 compiler)
 - **Stainless** (EPFL) — formal verification for Scala, powered by Z3
