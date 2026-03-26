@@ -3,101 +3,29 @@
 [![CI](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/ci.yml)
 [![Formal Verification](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/verify.yml/badge.svg)](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/verify.yml)
 
-Double-entry flow interpreter for Stock-Flow Consistent (SFC) agent-based models, with a formally verified reference core.
+Double-entry ledger core for Stock-Flow Consistent (SFC) agent-based models, with a formally verified reference model and production implementations constrained by shared contracts, executable reference models, and equivalence tests.
 
 Built for [amor-fati](https://github.com/boombustgroup/amor-fati), a macroeconomic SFC-ABM simulation engine.
 
-## Verification scope
+## What It Guarantees
 
-The project has three layers with different levels of assurance:
+- A formally verified reference core in `src/main/scala-stainless/Verified.scala` proves conservation, frame conditions, sequential application, distribution exactness, and bounded runtime refinement properties.
+- The pure production interpreter and the imperative fast path are tested against shared reference semantics and explicit execution contracts.
+- Overflow, index bounds, batch shape, and non-negative amounts are checked explicitly on runtime execution paths.
+- Distribution uses a shared pure executable model (`DistributeModel`) that is tested against both the production adapter and the verified `BigInt` shape.
 
-### Layer 1: Formally verified reference model (Stainless + Z3)
+Full verification boundaries, trust-chain details, and architecture notes live in [docs/verification.md](/Users/mmaciaszek/Documents/dev/complexity-econ/amor-fati-ledger-poc/docs/verification.md).
 
-`src/main/scala-stainless/Verified.scala` — mathematical proofs verified by Z3 SMT solver. The latest verification run completes with all generated conditions valid.
+## Public API
 
-| Property | What it guarantees | Proved by |
-|---|---|---|
-| **Flow conservation** | `balances(from) + balances(to)` unchanged after any flow | Z3 (pointwise) |
-| **Frame condition** | All accounts not involved in the flow are untouched | Z3 (universal quantifier) |
-| **Sequential application** | `applyFlowList` preserves conservation across any flow sequence | Z3 (structural induction) |
-| **Distribution exactness** | Residual-plug distribution sums exactly to `total` for 2, 3, and general N-way list form | Z3 (residual plug) |
-| **Proportional distribution model** | Exact-division, unit-with-residual, and floor-with-residual proportional list models are non-negative and sum exactly to `total` | Z3 |
-| **Runtime apply semantics** | `Map[Int, Long]` runtime model preserves exact debit/credit + frame condition under anti-overflow preconditions | Z3 |
-| **Pure interpreter semantics** | A Stainless `Map[Int, Long]` model matching the pure production interpreter is defined for single flows and flow lists, and refined to the checked runtime semantics under the same executable anti-overflow contract | Z3 |
-| **Runtime sequential semantics** | `applyRuntimeFlowList` is formally defined for flow sequences that satisfy an explicit `canApplyRuntimeFlowList` anti-overflow contract | Z3 |
-| **Runtime-bounded refinement step** | A `BigInt` model with `Long`-range bounds is formally shown to refine to the pure `applyFlow` reference semantics for both single flows and executable flow lists | Z3 |
-| **Commutativity** | Flows on disjoint accounts produce the same result in any order in `BigInt`, runtime `Int/Long`, and pure interpreter `Map[Int, Long]` models | Z3 |
-
-This is the reference model — primarily pure `Map[BigInt, BigInt]`, plus a verified `Map[Int, Long]` runtime model with explicit anti-overflow preconditions, a verified pure-interpreter semantics layer, a verified sequential runtime contract, and a bounded `BigInt` refinement layer that makes the runtime range assumptions explicit. No arrays, no mutation. A true formal proof.
-
-### Layer 2: Production code tested against reference (ScalaCheck + equivalence)
-
-Production implementations are **not themselves formally verified**. They are tested for correctness:
-
-- **`Interpreter.scala`** (pure Map-based) — property-based tests (ScalaCheck, 100+ random scenarios per property), explicit `canApplyFlow` / `canApplyAll` runtime overflow contracts with checked entrypoints, plus a test bridge against an embedded `BigInt` reference-model shape for non-overflow inputs
-- **`ImperativeInterpreter.scala`** (Array-based, fast) — tested for bit-for-bit equivalence with both `Interpreter.scala` and a pure runtime reference model via `EquivalenceSpec`, with shared runtime validation of batch dimensions, indices, non-negative amounts, and Long overflow safety via explicit checked contracts, a validated batch-plan wrapper, a preferred `planAndApplyAll` entrypoint, and a shared explicit batch-delta semantics layer
-- **`MutableWorldState.scala`** (mutable storage layer) — covered by direct contract tests for sparse snapshots, per-asset totals, key separation, checked reads/writes, and backing-array reuse; public callers now get checked helpers while raw backing arrays are limited to internal `ledger` package code
-- **`Distribute.scala`** (N-way distribution with floor-based residual plug) — thin production adapter over the shared pure `DistributeModel`, with property-based tests checking `sum == total`, non-negativity, exact equivalence across adapters, and the same floor-prefix/last-residual shape proved for list models in `Verified.scala`
-- **`DistributeModel.scala`** (shared pure distribution model) — canonical executable semantics for production floor-with-residual distribution, using `BigInt` internal accumulation to avoid hidden `Long` overflow in share-sum calculations, and the primary bridge target for the Stainless proof shape
-- **`DistributeReference.scala`** (pure distribution adapter) — thin list-based compatibility adapter over `DistributeModel`
-
-The chain of trust:
-
-```
-Stainless/Z3 proves → Verified.scala (reference model)
-Verified.scala proves → pure `Map[Int, Long]` interpreter semantics and flow-list refinement under executable anti-overflow preconditions
-InterpreterVerifiedBridgeSpec tests → Interpreter == embedded BigInt reference model (non-overflow inputs)
-InterpreterVerifiedBridgeSpec tests → Interpreter.applyAll == embedded BigInt reference model for non-overflow sequences
-EquivalenceSpec tests → RuntimeInterpreterReference == Interpreter (bit-for-bit)
-BatchDeltaSemanticsSpec tests → imperative and runtime-reference batch execution share one explicit delta semantics layer
-EquivalenceSpec tests → ImperativeInterpreter == RuntimeInterpreterReference (bit-for-bit)
-InterpreterPropertySpec tests → Interpreter checks analogous properties to Verified.scala
-DistributeSpec tests → Distribute, DistributeReference, and DistributeModel share the same floor-with-residual semantics
-DistributeVerifiedBridgeSpec tests → DistributeModel == Verified floor-with-residual BigInt list shape
-DistributeVerifiedBridgeSpec tests → DistributeReference == DistributeModel legacy adapter compatibility
-```
-
-**Important distinction:** `EquivalenceSpec` is a test, not a formal proof. It provides strong empirical evidence but not mathematical certainty that the production interpreter matches the verified model.
-
-### Layer 3: Not yet formally verified
-
-- Residual-plug N-way distribution and proportional floor-with-residual list models are formally verified in `Verified.scala`; `DistributeModel.scala` is now the canonical executable pure model of the production algorithm and the primary bridge target for the Stainless proof shape, with `BigInt` internal accumulation eliminating hidden `Long` overflow in share-sum calculations, while `Distribute.scala` / `DistributeReference.scala` are thin adapters over it, but there is still no direct Stainless proof over the production `Array[Long]` implementation
-- Batch dimensions, sender/target index bounds, non-negative amounts, and batch-level Long overflow safety — enforced at runtime by the shared `BatchExecutionContract`; sequential executability can now be packaged into `ValidatedBatchPlan` and consumed through `ImperativeInterpreter.planAndApplyAll`, but none of this batch machinery is yet formally verified
-- Imperative batch execution still mutates arrays directly; the new `BatchDeltaSemantics` layer reduces proof distance by isolating explicit debit/credit effects, but there is still no formal refinement proof for the array-mutation shell
-- `MutableWorldState` — not formally verified; direct contract tests cover storage semantics and checked access helpers, but internal package code can still reach mutable backing arrays for performance-sensitive paths
-- Direct proof bridge between runtime `Int/Long` model and `BigInt` reference model — not yet fully formalized in Stainless; a bounded `BigInt` refinement step now exists, but direct cross-type embedding for `Int/Long -> BigInt` is still missing
-- Overflow safety is now explicit on the pure interpreter path via `Interpreter.canApplyFlow`, `Interpreter.canApplyAll`, and checked wrappers, but most higher-level callers still rely on proving or preserving those contracts rather than constructing them through dedicated bounded domain types
-
-### Why pointwise, not global sum?
-
-Global `balances.values.sum == const` requires induction lemmas over arbitrary-size maps, which can stall SMT solvers. Instead, we prove **pointwise conservation** (the two involved accounts sum to the same value) plus the **frame condition** (everything else unchanged). This implies global conservation and verifies in <1 second.
-
-## Architecture
-
-```
-src/
-  main/
-    scala/                    # Production code (sbt compile + test)
-      com/boombustgroup/ledger/
-        Flow.scala            # Single flow: from, to, amount, mechanism
-        BatchedFlow.scala     # Sealed trait: Scatter (N:M) + Broadcast (1:N)
-        EntitySector.scala    # Population types: Households, Firms, Banks, ...
-        AssetType.scala       # Balance types: DemandDeposit, FirmLoan, ...
-        MechanismId.scala     # Opaque type for audit trail (generic, not model-specific)
-        Interpreter.scala     # Pure functional interpreter (Map-based)
-        ImperativeInterpreter.scala  # Production interpreter (Array-based, fast)
-        MutableWorldState.scala      # Array[Long] per (sector, asset) — DOD
-        Distribute.scala      # Proportional distribution with residual plug
-    scala-stainless/          # Formally verified reference model (Stainless standalone)
-      Verified.scala          # Post-conditions verified by Z3
-  test/
-    scala/
-      com/boombustgroup/ledger/
-        InterpreterSpec.scala         # Unit tests
-        InterpreterPropertySpec.scala # ScalaCheck property-based tests
-        DistributeSpec.scala          # Distribution exactness tests
-        EquivalenceSpec.scala         # Pure == Imperative bit-for-bit equivalence
-```
+- [Interpreter.scala](/Users/mmaciaszek/Documents/dev/complexity-econ/amor-fati-ledger-poc/src/main/scala/com/boombustgroup/ledger/Interpreter.scala)  
+  Pure `Map`-based execution with `canApplyFlow`, `canApplyAll`, `applyCheckedFlow`, and `applyCheckedAll`.
+- [ImperativeInterpreter.scala](/Users/mmaciaszek/Documents/dev/complexity-econ/amor-fati-ledger-poc/src/main/scala/com/boombustgroup/ledger/ImperativeInterpreter.scala)  
+  Fast mutable execution path with checked batch execution, `ValidatedBatchPlan`, and preferred `planAndApplyAll`.
+- [Distribute.scala](/Users/mmaciaszek/Documents/dev/complexity-econ/amor-fati-ledger-poc/src/main/scala/com/boombustgroup/ledger/Distribute.scala)  
+  Production distribution adapter over the shared pure `DistributeModel`.
+- [verify.sh](/Users/mmaciaszek/Documents/dev/complexity-econ/amor-fati-ledger-poc/verify.sh)  
+  Runs Stainless + Z3 over the reference model.
 
 ## Run
 
@@ -122,10 +50,10 @@ sbt test
 - **ScalaCheck** — property-based testing
 - **Long-based arithmetic** — all amounts are `Long` (scale 10^4), avoiding floating-point error within bounded integer arithmetic
 
-## Part of the amor-fati ecosystem
+## Further Reading
 
+- [docs/verification.md](/Users/mmaciaszek/Documents/dev/complexity-econ/amor-fati-ledger-poc/docs/verification.md) — verification scope, trust chain, proof boundaries, and internal architecture notes
 - [amor-fati](https://github.com/boombustgroup/amor-fati) — macroeconomic SFC-ABM simulation engine
-- **amor-fati-ledger** — this repo (ledger core with a formally verified reference model)
 
 ## License
 
