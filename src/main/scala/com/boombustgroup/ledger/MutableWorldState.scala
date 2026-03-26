@@ -31,6 +31,10 @@ class MutableWorldState(private val sectorSizes: Map[EntitySector, Int]):
   def sectorSize(sector: EntitySector): Int =
     sectorSizes.getOrElse(sector, 1)
 
+  /** Read-only view of configured sector sizes for validated planning. */
+  def sectorSizesView: Map[EntitySector, Int] =
+    sectorSizes
+
   /** Snapshot all balances as immutable Map (for equivalence testing). */
   def snapshot: Map[(EntitySector, AssetType, Int), Long] =
     stores.flatMap { case ((sector, asset), arr) =>
