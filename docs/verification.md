@@ -66,34 +66,3 @@ Important distinction: `EquivalenceSpec` is a test, not a formal proof. It provi
 ## Why Pointwise, Not Global Sum?
 
 Global `balances.values.sum == const` requires induction lemmas over arbitrary-size maps, which can stall SMT solvers. Instead, the proof uses pointwise conservation on the two touched accounts plus the frame condition for every other account. Together, those imply global conservation while staying solver-friendly.
-
-## Internal Architecture Notes
-
-```text
-src/
-  main/
-    scala/
-      com/boombustgroup/ledger/
-        Flow.scala
-        BatchedFlow.scala
-        Interpreter.scala
-        ImperativeInterpreter.scala
-        MutableWorldState.scala
-        Distribute.scala
-        DistributeModel.scala
-        BatchDeltaSemantics.scala
-    scala-stainless/
-      Verified.scala
-  test/
-    scala/
-      com/boombustgroup/ledger/
-        InterpreterSpec.scala
-        InterpreterPropertySpec.scala
-        InterpreterVerifiedBridgeSpec.scala
-        EquivalenceSpec.scala
-        BatchDeltaSemanticsSpec.scala
-        DistributeSpec.scala
-        DistributeVerifiedBridgeSpec.scala
-        MutableWorldStateSpec.scala
-        ValidatedBatchPlanSpec.scala
-```
