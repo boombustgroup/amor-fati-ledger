@@ -5,10 +5,10 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-/** Test-only bridge between the pure distribution reference and the Stainless floor-with-residual list shape.
+/** Test-only bridge between the shared pure distribution model and the Stainless floor-with-residual list shape.
   *
-  * This is not a formal Stainless proof over the production `Array[Long]` implementation. It narrows the gap by checking that the pure
-  * executable reference model follows the same BigInt list shape that `Verified.scala` proves.
+  * This is not a formal Stainless proof over the production `Array[Long]` implementation. It narrows the gap by checking that the shared
+  * executable model in main code follows the same BigInt list shape that `Verified.scala` proves.
   */
 class DistributeVerifiedBridgeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
 
@@ -21,14 +21,14 @@ class DistributeVerifiedBridgeSpec extends AnyFlatSpec with Matchers with ScalaC
     val prefix = bigIntFloorPrefix(total, shares)
     prefix :+ (BigInt(total) - prefix.foldLeft(BigInt(0))(_ + _))
 
-  "DistributeReference.distribute" should "match the Verified floor-with-residual list shape" in {
+  "DistributeModel.distribute" should "match the Verified floor-with-residual list shape" in {
     val genTotal  = Gen.choose(1L, 10000000000L)
     val genSize   = Gen.choose(1, 20)
     val genShares = genSize.flatMap(n => Gen.listOfN(n, Gen.choose(1L, 10000L)))
 
     forAll(genTotal, genShares) { (total, shares) =>
-      val reference = DistributeReference.distribute(total, shares).map(BigInt(_))
-      reference shouldBe verifiedShape(total, shares)
+      val model = DistributeModel.distribute(total, shares.toVector).map(BigInt(_)).toList
+      model shouldBe verifiedShape(total, shares)
     }
   }
 
@@ -36,5 +36,15 @@ class DistributeVerifiedBridgeSpec extends AnyFlatSpec with Matchers with ScalaC
     val total  = 12345L
     val shares = List(10000L)
 
-    DistributeReference.distribute(total, shares).map(BigInt(_)) shouldBe verifiedShape(total, shares)
+    DistributeModel.distribute(total, shares.toVector).map(BigInt(_)).toList shouldBe verifiedShape(total, shares)
+  }
+
+  it should "keep the legacy list adapter aligned with the shared pure model" in {
+    val genTotal  = Gen.choose(1L, 10000000000L)
+    val genSize   = Gen.choose(1, 20)
+    val genShares = genSize.flatMap(n => Gen.listOfN(n, Gen.choose(1L, 10000L)))
+
+    forAll(genTotal, genShares) { (total, shares) =>
+      DistributeReference.distribute(total, shares) shouldBe DistributeModel.distribute(total, shares.toVector).toList
+    }
   }
