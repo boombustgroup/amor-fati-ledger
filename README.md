@@ -1,4 +1,7 @@
-# amor-fati-ledger-poc
+# amor-fati-ledger
+
+[![CI](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/ci.yml)
+[![Formal Verification](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/verify.yml/badge.svg)](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/verify.yml)
 
 Double-entry flow interpreter for Stock-Flow Consistent (SFC) agent-based models, with a formally verified reference core.
 
@@ -117,7 +120,7 @@ sbt test
 ## Part of the amor-fati ecosystem
 
 - [amor-fati](https://github.com/boombustgroup/amor-fati) — macroeconomic SFC-ABM simulation engine
-- **amor-fati-ledger-poc** — this repo (ledger POC with a formally verified reference core)
+- **amor-fati-ledger** — this repo (ledger core with a formally verified reference model)
 
 ## License
 
