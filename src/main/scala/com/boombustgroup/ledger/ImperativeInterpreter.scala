@@ -38,6 +38,10 @@ object ImperativeInterpreter:
       acc.flatMap(_ => applyCheckedBatch(state, batch))
     }
 
+  /** Execute a batch sequence that has already been validated against the current state snapshot. */
+  def applyValidatedPlan(state: MutableWorldState, plan: ValidatedBatchPlan): Unit =
+    applyAll(state, plan.batches)
+
   /** Apply a single batched flow. O(N) where N = amounts.length. */
   def applyBatch(state: MutableWorldState, batch: BatchedFlow): Unit =
     validateBatch(state, batch)
