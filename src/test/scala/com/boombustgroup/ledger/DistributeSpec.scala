@@ -8,8 +8,8 @@ import org.scalacheck.Gen
 class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
 
   private def floorPrefix(total: Long, shares: Array[Long]): Array[Long] =
-    val shareSum = shares.sum
-    shares.init.map(share => ((BigInt(total) * BigInt(share)) / BigInt(shareSum)).toLong)
+    val shareSum = shares.foldLeft(BigInt(0))((acc, share) => acc + BigInt(share))
+    shares.init.map(share => ((BigInt(total) * BigInt(share)) / shareSum).toLong)
 
   "distribute" should "always sum to total (residual plugging)" in {
     val genTotal  = Gen.choose(1L, 10000000000L)
@@ -96,4 +96,18 @@ class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyCh
       Distribute.distribute(total, shares).toVector shouldBe model
       DistributeReference.distribute(total, shares.toList) shouldBe model.toList
     }
+  }
+
+  it should "handle share sums beyond Long.MaxValue via BigInt internal accumulation" in {
+    val shares = Vector(Long.MaxValue, Long.MaxValue)
+
+    DistributeModel.canDistribute(100L, shares) shouldBe true
+    DistributeModel.distribute(100L, shares) shouldBe Vector(50L, 50L)
+    Distribute.distribute(100L, shares.toArray).toVector shouldBe Vector(50L, 50L)
+  }
+
+  it should "return a checked Left for invalid production-shaped inputs" in {
+    DistributeModel.distributeChecked(10L, Vector.empty).isLeft shouldBe true
+    DistributeModel.distributeChecked(-1L, Vector(1L)).isLeft shouldBe true
+    DistributeModel.distributeChecked(10L, Vector(0L, 0L)).isLeft shouldBe true
   }
