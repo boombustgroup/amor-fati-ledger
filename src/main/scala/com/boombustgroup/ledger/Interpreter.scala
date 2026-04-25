@@ -42,7 +42,7 @@ object Interpreter:
       stateEither.flatMap(state => applyCheckedFlow(state, flow))
     }
 
-  /** Apply a single flow to a balance map. Double-entry: debit from, credit to.
+  /** Apply a single flow to a balance map. Two-sided entry: debit from, credit to.
     *
     * Assumes the caller already enforced `canApplyFlow` if runtime overflow safety is required.
     *
